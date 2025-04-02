@@ -28,7 +28,9 @@ Real-Time Lidar and Camera Rendering with 3D Gaussian Splatting for Autonomous D
 
 
 # About
-This is the official repository for the CVPR 2025 paper [_SplatAD: Real-Time Lidar and Camera Rendering with 3D Gaussian Splatting for Autonomous Driving_](https://arxiv.org/abs/2411.16816). The code in this repository builds upon the open-source library [gsplat](https://github.com/nerfstudio-project/gsplat), with modifications and extensions designed for autonomous driving data.
+This is the official repository for the CVPR 2025 paper [_SplatAD: Real-Time Lidar and Camera Rendering with 3D Gaussian Splatting for Autonomous Driving_](https://arxiv.org/abs/2411.16816). The code in this repository builds upon the open-source library [gsplat](https://github.com/nerfstudio-project/gsplat), with modifications and extensions designed for autonomous driving data. 
+
+While the code contians all components needed to efficiently render camera and lidar data, the SplatAD-model itself, including dataloading, decoders, etc., will be released through [neurad-studio](https://github.com/georghess/neurad-studio).
 
 **We welcome all contributions!**
 
