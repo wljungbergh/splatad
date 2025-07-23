@@ -11,7 +11,7 @@ exec(open("gsplat/version.py", "r").read())
 
 URL = "https://github.com/nerfstudio-project/gsplat"
 
-BUILD_NO_CUDA = os.getenv("BUILD_NO_CUDA", "0") == "1"
+BUILD_CUDA = os.getenv("BUILD_CUDA", "0") == "1"
 WITH_SYMBOLS = os.getenv("WITH_SYMBOLS", "0") == "1"
 LINE_INFO = os.getenv("LINE_INFO", "0") == "1"
 
@@ -137,8 +137,8 @@ setup(
             "twine",
         ],
     },
-    ext_modules=get_extensions() if not BUILD_NO_CUDA else [],
-    cmdclass={"build_ext": get_ext()} if not BUILD_NO_CUDA else {},
+    ext_modules=get_extensions() if BUILD_CUDA else [],
+    cmdclass={"build_ext": get_ext()} if BUILD_CUDA else {},
     packages=find_packages(),
     # https://github.com/pypa/setuptools/issues/1461#issuecomment-954725244
     include_package_data=True,
