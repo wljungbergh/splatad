@@ -2,9 +2,5 @@
 # -- Everything needed just to run setup.py ---------------
 requires = [
     "setuptools>=62",      # the build backend
-    "wheel",
-    "torch",              # provides torch.utils.cpp_extension
-    "ninja",         # speeds up C++/CUDA builds
-    "numpy"          # setup.py imports numpy for version checks
 ]
 build-backend = "setuptools.build_meta"
