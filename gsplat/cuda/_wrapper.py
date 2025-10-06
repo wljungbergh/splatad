@@ -820,6 +820,7 @@ def rasterize_to_pixels(
     isect_offsets: Tensor,                         # [C, tile_height, tile_width]
     flatten_ids: Tensor,                           # [n_isects]
     rolling_shutter_time: Optional[Tensor] = None, # [C]
+    rolling_shutter_direction: Optional[int] = None, # 1: top2bottom, 2: bottom2top, 3: left2right, 4: right2left, 5: no rolling shutter
     backgrounds: Optional[Tensor] = None,          # [C, channels]
     packed: bool = False,
     absgrad: bool = False,
@@ -869,6 +870,10 @@ def rasterize_to_pixels(
         assert rolling_shutter_time.shape == (C,), rolling_shutter_time.shape
     else:
         rolling_shutter_time = torch.zeros(C, device=device)
+    if rolling_shutter_direction is not None:
+        assert rolling_shutter_direction in (1,2,3,4,5), f"rolling_shutter_direction must be one of (1, 2, 3, 4, 5), but got {rolling_shutter_direction}"
+    else:
+        rolling_shutter_direction = 1
     if backgrounds is not None:
         assert backgrounds.shape == (C, colors.shape[-1]), backgrounds.shape
         backgrounds = backgrounds.contiguous()
@@ -939,6 +944,7 @@ def rasterize_to_pixels(
         image_width,
         image_height,
         tile_size,
+        rolling_shutter_direction,
         isect_offsets.contiguous(),
         flatten_ids.contiguous(),
         absgrad,
@@ -1126,6 +1132,7 @@ def rasterize_to_indices_in_range(
     isect_offsets: Tensor,                          # [C, tile_height, tile_width]
     flatten_ids: Tensor,                            # [n_isects]
     rolling_shutter_time: Optional[Tensor] = None,  # [C]
+    rolling_shutter_direction: int = 1,              # 1: top2bot, 2: left2right, 3: bot2top, 4: right2left, 5: global
 ) -> Tuple[Tensor, Tensor, Tensor]:
     """Rasterizes a batch of Gaussians to images but only returns the indices.
 
@@ -1188,6 +1195,7 @@ def rasterize_to_indices_in_range(
         image_width,
         image_height,
         tile_size,
+        rolling_shutter_direction,
         isect_offsets.contiguous(),
         flatten_ids.contiguous(),
     )
@@ -1805,6 +1813,7 @@ class _RasterizeToPixels(torch.autograd.Function):
         opacities: Tensor,            # [C, N]
         pix_vels: Tensor,             # [C, N, 2]
         rolling_shutter_time: Tensor, # [C]
+        rolling_shutter_direction: int, # <- should probably make this per cam
         backgrounds: Tensor,          # [C, D], Optional
         width: int,
         height: int,
@@ -1826,6 +1835,7 @@ class _RasterizeToPixels(torch.autograd.Function):
             width,
             height,
             tile_size,
+            rolling_shutter_direction,
             isect_offsets,
             flatten_ids,
         )
@@ -1847,6 +1857,7 @@ class _RasterizeToPixels(torch.autograd.Function):
         ctx.height = height
         ctx.tile_size = tile_size
         ctx.absgrad = absgrad
+        ctx.rolling_shutter_direction = rolling_shutter_direction
 
         # double to float
         render_alphas = render_alphas.float()
@@ -1875,6 +1886,7 @@ class _RasterizeToPixels(torch.autograd.Function):
         height = ctx.height
         tile_size = ctx.tile_size
         absgrad = ctx.absgrad
+        rolling_shutter_direction = ctx.rolling_shutter_direction
 
         (
             v_means2d_abs,
@@ -1890,6 +1902,7 @@ class _RasterizeToPixels(torch.autograd.Function):
             opacities,
             pix_vels,
             rolling_shutter_time,
+            rolling_shutter_direction,
             backgrounds,
             width,
             height,
@@ -1919,6 +1932,7 @@ class _RasterizeToPixels(torch.autograd.Function):
             v_colors,
             v_opacities,
             v_pix_vels,
+            None,
             None,
             v_backgrounds,
             None,

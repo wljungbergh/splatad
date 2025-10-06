@@ -33,6 +33,7 @@ def rasterization(
     linear_velocity: Optional[Tensor] = None,  # [C, 3]
     angular_velocity: Optional[Tensor] = None,  # [C, 3]
     rolling_shutter_time: Optional[Tensor] = None,  # [C]
+    rolling_shutter_direction: Optional[int] = 1,  # 1: top2bottom, 2: bottom2top, 3: left2right, 4: right2left, 5: no rolling shutter
     near_plane: float = 0.01,
     far_plane: float = 1e10,
     radius_clip: float = 0.0,
@@ -224,6 +225,10 @@ def rasterization(
         assert rolling_shutter_time.shape == (C,), rolling_shutter_time.shape
     else:
         rolling_shutter_time = torch.zeros(C, device=means.device)
+    if rolling_shutter_direction is not None:
+        assert rolling_shutter_direction in (1,2,3,4,5), rolling_shutter_direction
+    else:
+        rolling_shutter_direction = 1
     assert render_mode in ["RGB", "D", "ED", "RGB+D", "RGB+ED"], render_mode
 
     if sh_degree is None:
@@ -382,6 +387,7 @@ def rasterization(
                 isect_offsets,
                 flatten_ids,
                 rolling_shutter_time,
+                rolling_shutter_direction=rolling_shutter_direction,
                 backgrounds=backgrounds_chunk,
                 packed=packed,
                 absgrad=absgrad,
@@ -403,6 +409,7 @@ def rasterization(
             isect_offsets,
             flatten_ids,
             rolling_shutter_time,
+            rolling_shutter_direction=rolling_shutter_direction,
             backgrounds=backgrounds,
             packed=packed,
             absgrad=absgrad,

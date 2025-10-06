@@ -834,6 +834,7 @@ def _rasterize_to_pixels(
     rolling_shutter_time: Tensor,  # [C]
     backgrounds: Optional[Tensor] = None,  # [C, channels]
     batch_per_iter: int = 100,
+    rolling_shutter_direction: int = 1,
 ):
     """Pytorch implementation of `gsplat.cuda._wrapper.rasterize_to_pixels()`.
 
