@@ -849,6 +849,7 @@ __global__ void rasterize_to_indices_in_range_kernel(
     const uint32_t tile_size,
     const uint32_t tile_width,
     const uint32_t tile_height,
+    const uint32_t rolling_shutter_direction, // 1: top2bot, 2: left2right, 3: bot2top, 4: right2left, 5: global 
     const int32_t *__restrict__ tile_offsets, // [C, tile_height, tile_width]
     const int32_t *__restrict__ flatten_ids,  // [n_isects]
     const float *__restrict__ transmittances, // [C, image_height, image_width]
@@ -873,7 +874,28 @@ __global__ void rasterize_to_indices_in_range_kernel(
     float px = (float)j + 0.5f;
     float py = (float)i + 0.5f;
     int32_t pix_id = i * image_width + j;
-    float roll_time = rolling_shutter_time[camera_id] * ((py - 0.5f) / (image_height - 1) - 0.5f);
+    // Calculate rolling shutter time based on shutter direction
+    float roll_time = 0.0f;
+    switch (rolling_shutter_direction) {
+        case 1: // top2bot
+            roll_time = rolling_shutter_time[camera_id] * ((py - 0.5f) / (image_height - 1) - 0.5f);
+            break;
+        case 2: // left2right
+            roll_time = rolling_shutter_time[camera_id] * ((px - 0.5f) / (image_width - 1) - 0.5f);
+            break;
+        case 3: // bot2top
+            roll_time = rolling_shutter_time[camera_id] * ((-py + image_height - 0.5f) / (image_height - 1) - 0.5f);
+            break;
+        case 4: // right2left
+            roll_time = rolling_shutter_time[camera_id] * ((-px + image_width - 0.5f) / (image_width - 1) - 0.5f);
+            break;
+        case 5: // global
+            roll_time = 0.0f; // No rolling shutter effect
+            break;
+        default:
+            // Default to top2bot behavior if an invalid value is provided
+            roll_time = rolling_shutter_time[camera_id] * ((py - 0.5f) / (image_height - 1) - 0.5f);
+    }
 
     // return if out of bounds
     // keep not rasterizing threads around for reading data
@@ -1013,6 +1035,8 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_to_indices_in_range_tensor(
     const uint32_t image_width,
     const uint32_t image_height,
     const uint32_t tile_size,
+    // shutter direction
+    const uint32_t rolling_shutter_direction,    // 1: top2bot, 2: left2right, 3: bot2top, 4: right2left, 5: global
     // intersections
     const torch::Tensor &tile_offsets, // [C, tile_height, tile_width]
     const torch::Tensor &flatten_ids   // [n_isects]
@@ -1058,7 +1082,7 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_to_indices_in_range_tensor(
             (float3 *)conics.data_ptr<float>(), opacities.data_ptr<float>(),
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             transmittances.data_ptr<float>(), nullptr, chunk_cnts.data_ptr<int32_t>(),
@@ -1082,7 +1106,7 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_to_indices_in_range_tensor(
             (float3 *)conics.data_ptr<float>(), opacities.data_ptr<float>(),
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             transmittances.data_ptr<float>(), chunk_starts.data_ptr<int32_t>(), nullptr,
@@ -1372,6 +1396,7 @@ __global__ void rasterize_to_pixels_fwd_kernel(
     const uint32_t tile_size,
     const uint32_t tile_width,
     const uint32_t tile_height,
+    const uint32_t rolling_shutter_direction, // 1: top2bot, 2: left2right, 3: bot2top, 4: right2left, 5: global
     const int32_t *__restrict__ tile_offsets, // [C, tile_height, tile_width]
     const int32_t *__restrict__ flatten_ids,  // [n_isects]
     float *__restrict__ render_colors,        // [C, image_height, image_width, COLOR_DIM]
@@ -1398,7 +1423,28 @@ __global__ void rasterize_to_pixels_fwd_kernel(
     float px = (float)j + 0.5f;
     float py = (float)i + 0.5f;
     int32_t pix_id = i * image_width + j;
-    float roll_time = rolling_shutter_time[camera_id] * ((py - 0.5f) / (image_height - 1) - 0.5f);
+    // Calculate rolling shutter time based on shutter direction
+    float roll_time = 0.0f;
+    switch (rolling_shutter_direction) {
+        case 1: // top2bot
+            roll_time = rolling_shutter_time[camera_id] * ((py - 0.5f) / (image_height - 1) - 0.5f);
+            break;
+        case 2: // left2right
+            roll_time = rolling_shutter_time[camera_id] * ((px - 0.5f) / (image_width - 1) - 0.5f);
+            break;
+        case 3: // bot2top
+            roll_time = rolling_shutter_time[camera_id] * ((-py + image_height - 0.5f) / (image_height - 1) - 0.5f);
+            break;
+        case 4: // right2left
+            roll_time = rolling_shutter_time[camera_id] * ((-px + image_width - 0.5f) / (image_width - 1) - 0.5f);
+            break;
+        case 5: // global
+            roll_time = 0.0f; // No rolling shutter effect
+            break;
+        default:
+            // Default to top2bot behavior if an invalid value is provided
+            roll_time = rolling_shutter_time[camera_id] * ((py - 0.5f) / (image_height - 1) - 0.5f);
+    }
 
     // return if out of bounds
     // keep not rasterizing threads around for reading data
@@ -1591,7 +1637,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -1614,7 +1660,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -1637,7 +1683,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -1660,7 +1706,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -1683,7 +1729,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -1706,7 +1752,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -1729,7 +1775,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -1752,7 +1798,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -1775,7 +1821,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -1798,7 +1844,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -1821,7 +1867,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -1844,7 +1890,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -1867,7 +1913,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -1890,7 +1936,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -1913,7 +1959,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -1936,7 +1982,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -1959,7 +2005,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -1982,7 +2028,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -2005,7 +2051,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> rasterize_to_pixels_fwd_
             (float2 *)pix_vels.data_ptr<float>(),
             rolling_shutter_time.data_ptr<float>(),
             backgrounds.has_value() ? backgrounds.value().data_ptr<float>() : nullptr,
-            image_width, image_height, tile_size, tile_width, tile_height,
+            image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
             tile_offsets.data_ptr<int32_t>(),
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
@@ -2846,6 +2892,7 @@ __global__ void rasterize_to_pixels_bwd_kernel(
     const uint32_t tile_size,
     const uint32_t tile_width,
     const uint32_t tile_height,
+    const uint32_t rolling_shutter_direction, // 1: top2bot, 2: left2right, 3: bot2top, 4: right2left, 5: global
     const int32_t *__restrict__ tile_offsets, // [C, tile_height, tile_width]
     const int32_t *__restrict__ flatten_ids,  // [n_isects]
     // fwd outputs
@@ -2882,7 +2929,28 @@ __global__ void rasterize_to_pixels_bwd_kernel(
     const float py = (float)i + 0.5f;
     // clamp this value to the last pixel
     const int32_t pix_id = min(i * image_width + j, image_width * image_height - 1);
-    float roll_time = rolling_shutter_time[camera_id] * ((py - 0.5f) / (image_height - 1) - 0.5f);
+    // Calculate rolling shutter time based on shutter direction
+    float roll_time = 0.0f;
+    switch (rolling_shutter_direction) {
+        case 1: // top2bot
+            roll_time = rolling_shutter_time[camera_id] * ((py - 0.5f) / (image_height - 1) - 0.5f);
+            break;
+        case 2: // left2right
+            roll_time = rolling_shutter_time[camera_id] * ((px - 0.5f) / (image_width - 1) - 0.5f);
+            break;
+        case 3: // bot2top
+            roll_time = rolling_shutter_time[camera_id] * ((-py + image_height - 0.5f) / (image_height - 1) - 0.5f);
+            break;
+        case 4: // right2left
+            roll_time = rolling_shutter_time[camera_id] * ((-px + image_width - 0.5f) / (image_width - 1) - 0.5f);
+            break;
+        case 5: // global
+            roll_time = 0.0f; // No rolling shutter effect
+            break;
+        default:
+            // Default to top2bot behavior if an invalid value is provided
+            roll_time = rolling_shutter_time[camera_id] * ((py - 0.5f) / (image_height - 1) - 0.5f);
+    }
 
     // keep not rasterizing threads around for reading data
     bool inside = (i < image_height && j < image_width);
@@ -3177,7 +3245,7 @@ rasterize_to_pixels_bwd_tensor(
                 rolling_shutter_time.data_ptr<float>(),
                 backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                         : nullptr,
-                image_width, image_height, tile_size, tile_width, tile_height,
+                image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                 tile_offsets.data_ptr<int32_t>(),
                 flatten_ids.data_ptr<int32_t>(),
                 render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3206,7 +3274,7 @@ rasterize_to_pixels_bwd_tensor(
                 rolling_shutter_time.data_ptr<float>(),
                 backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                         : nullptr,
-                image_width, image_height, tile_size, tile_width, tile_height,
+                image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                 tile_offsets.data_ptr<int32_t>(),
                 flatten_ids.data_ptr<int32_t>(),
                 render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3235,7 +3303,7 @@ rasterize_to_pixels_bwd_tensor(
                 rolling_shutter_time.data_ptr<float>(),
                 backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                         : nullptr,
-                image_width, image_height, tile_size, tile_width, tile_height,
+                image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                 tile_offsets.data_ptr<int32_t>(),
                 flatten_ids.data_ptr<int32_t>(),
                 render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3264,7 +3332,7 @@ rasterize_to_pixels_bwd_tensor(
                 rolling_shutter_time.data_ptr<float>(),
                 backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                         : nullptr,
-                image_width, image_height, tile_size, tile_width, tile_height,
+                image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                 tile_offsets.data_ptr<int32_t>(),
                 flatten_ids.data_ptr<int32_t>(),
                 render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3293,7 +3361,7 @@ rasterize_to_pixels_bwd_tensor(
                 rolling_shutter_time.data_ptr<float>(),
                 backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                         : nullptr,
-                image_width, image_height, tile_size, tile_width, tile_height,
+                image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                 tile_offsets.data_ptr<int32_t>(),
                 flatten_ids.data_ptr<int32_t>(),
                 render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3322,7 +3390,7 @@ rasterize_to_pixels_bwd_tensor(
                 rolling_shutter_time.data_ptr<float>(),
                 backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                         : nullptr,
-                image_width, image_height, tile_size, tile_width, tile_height,
+                image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                 tile_offsets.data_ptr<int32_t>(),
                 flatten_ids.data_ptr<int32_t>(),
                 render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3351,7 +3419,7 @@ rasterize_to_pixels_bwd_tensor(
                 rolling_shutter_time.data_ptr<float>(),
                 backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                         : nullptr,
-                image_width, image_height, tile_size, tile_width, tile_height,
+                image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                 tile_offsets.data_ptr<int32_t>(),
                 flatten_ids.data_ptr<int32_t>(),
                 render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3380,7 +3448,7 @@ rasterize_to_pixels_bwd_tensor(
                 rolling_shutter_time.data_ptr<float>(),
                 backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                         : nullptr,
-                image_width, image_height, tile_size, tile_width, tile_height,
+                image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                 tile_offsets.data_ptr<int32_t>(),
                 flatten_ids.data_ptr<int32_t>(),
                 render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3409,7 +3477,7 @@ rasterize_to_pixels_bwd_tensor(
                 rolling_shutter_time.data_ptr<float>(),
                 backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                         : nullptr,
-                image_width, image_height, tile_size, tile_width, tile_height,
+                image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                 tile_offsets.data_ptr<int32_t>(),
                 flatten_ids.data_ptr<int32_t>(),
                 render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3438,7 +3506,7 @@ rasterize_to_pixels_bwd_tensor(
                 rolling_shutter_time.data_ptr<float>(),
                 backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                         : nullptr,
-                image_width, image_height, tile_size, tile_width, tile_height,
+                image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                 tile_offsets.data_ptr<int32_t>(),
                 flatten_ids.data_ptr<int32_t>(),
                 render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3467,7 +3535,7 @@ rasterize_to_pixels_bwd_tensor(
                 rolling_shutter_time.data_ptr<float>(),
                 backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                         : nullptr,
-                image_width, image_height, tile_size, tile_width, tile_height,
+                image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                 tile_offsets.data_ptr<int32_t>(),
                 flatten_ids.data_ptr<int32_t>(),
                 render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3496,7 +3564,7 @@ rasterize_to_pixels_bwd_tensor(
                 rolling_shutter_time.data_ptr<float>(),
                 backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                         : nullptr,
-                image_width, image_height, tile_size, tile_width, tile_height,
+                image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                 tile_offsets.data_ptr<int32_t>(),
                 flatten_ids.data_ptr<int32_t>(),
                 render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3525,7 +3593,7 @@ rasterize_to_pixels_bwd_tensor(
                 rolling_shutter_time.data_ptr<float>(),
                 backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                         : nullptr,
-                image_width, image_height, tile_size, tile_width, tile_height,
+                image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                 tile_offsets.data_ptr<int32_t>(),
                 flatten_ids.data_ptr<int32_t>(),
                 render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3555,7 +3623,7 @@ rasterize_to_pixels_bwd_tensor(
                     rolling_shutter_time.data_ptr<float>(),
                     backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                             : nullptr,
-                    image_width, image_height, tile_size, tile_width, tile_height,
+                    image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                     tile_offsets.data_ptr<int32_t>(),
                     flatten_ids.data_ptr<int32_t>(),
                     render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3585,7 +3653,7 @@ rasterize_to_pixels_bwd_tensor(
                     rolling_shutter_time.data_ptr<float>(),
                     backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                             : nullptr,
-                    image_width, image_height, tile_size, tile_width, tile_height,
+                    image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                     tile_offsets.data_ptr<int32_t>(),
                     flatten_ids.data_ptr<int32_t>(),
                     render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3615,7 +3683,7 @@ rasterize_to_pixels_bwd_tensor(
                     rolling_shutter_time.data_ptr<float>(),
                     backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                             : nullptr,
-                    image_width, image_height, tile_size, tile_width, tile_height,
+                    image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                     tile_offsets.data_ptr<int32_t>(),
                     flatten_ids.data_ptr<int32_t>(),
                     render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3645,7 +3713,7 @@ rasterize_to_pixels_bwd_tensor(
                     rolling_shutter_time.data_ptr<float>(),
                     backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                             : nullptr,
-                    image_width, image_height, tile_size, tile_width, tile_height,
+                    image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                     tile_offsets.data_ptr<int32_t>(),
                     flatten_ids.data_ptr<int32_t>(),
                     render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3675,7 +3743,7 @@ rasterize_to_pixels_bwd_tensor(
                     rolling_shutter_time.data_ptr<float>(),
                     backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                             : nullptr,
-                    image_width, image_height, tile_size, tile_width, tile_height,
+                    image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                     tile_offsets.data_ptr<int32_t>(),
                     flatten_ids.data_ptr<int32_t>(),
                     render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
@@ -3705,7 +3773,7 @@ rasterize_to_pixels_bwd_tensor(
                     rolling_shutter_time.data_ptr<float>(),
                     backgrounds.has_value() ? backgrounds.value().data_ptr<float>()
                                             : nullptr,
-                    image_width, image_height, tile_size, tile_width, tile_height,
+                    image_width, image_height, tile_size, tile_width, tile_height, rolling_shutter_direction,
                     tile_offsets.data_ptr<int32_t>(),
                     flatten_ids.data_ptr<int32_t>(),
                     render_alphas.data_ptr<float>(), last_ids.data_ptr<int32_t>(),
